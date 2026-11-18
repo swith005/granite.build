@@ -226,19 +226,31 @@ re-pulled. A mutable tag (`:latest`) then isn't refreshed either: pin a version,
 copy with `docker exec skypilot-control-plane crictl rmi <image>`.
 
 **`skypilot/kubernetes/vela`** (draft, not yet run on the cluster) is the same model on the Vela
-OpenShift cluster, in the `granite-build` namespace. It differs from the kind env in three ways:
+OpenShift cluster, in the `granite-build` namespace. It carries over what was validated on the gb CPU
+cluster, also OpenShift, where the command-step 1step runner and cancellation tests pass. It differs
+from the kind env in these ways:
 
 - It pins a fixed context alias, `gb-vela`, because the context `oc login` creates is named after the
   user. Create the alias once from your own login (the command is in the env file's header); a later
   `oc login` refreshes the token behind it.
 - It sets `namespace: granite-build` under `context_configs.gb-vela`, which SkyPilot 0.14 prefers over
   the kubeconfig context's namespace.
+- Pods run as root (`runAsUser: 0`) through the `gdr` service account (`remote_identity: gdr`), the
+  account gb steps already use there, so SkyPilot's `apt-get` bootstrap works under OpenShift's
+  arbitrary UIDs. `gdr` cannot delete pods or services, so in-pod autodown fails (see
+  [Idle timeout](#idle-timeout-autodown-not-autostop)).
+- Every pod uses a clean image instead of SkyPilot's default, which the cluster's RHACS policy rejects
+  (see [Custom images](#custom-images)); builds set `command_config.image` themselves.
+- `/shared` is the `gb-skypilot/` folder (a `subPath`) on `gb-afm-read-write`, the gb chart's
+  ReadWriteMany claim, so it never touches the data real gb jobs keep there.
 - It drops the kind-only settings: no `IfNotPresent` pull policy and no 1Gi hf step memory.
 
-It expects a ReadWriteMany claim named `gb-shared` in `granite-build`. OpenShift runs pods as an
-arbitrary non-root UID, so see [Custom images](#custom-images) before choosing a step image. The build
-test is `test/integration/ibm/buildrunner/skypilot/kube_vela/test_1step.py`; it skips unless the alias,
-the API server and the claim all answer (`libgbtest.kube.vela_cluster_reachable`).
+**It cannot launch on Vela yet.** `granite-build` is an MLBatch namespace: users and the gb service
+account may create AppWrappers and PyTorchJobs but not plain pods, and SkyPilot creates plain pods and
+runs commands in them with `kubectl exec`, which users lack there. Bridging that is an open decision.
+Whether the `gdr` SCC admits `runAsUser: 0` on Vela is also still to be confirmed. The build test is
+`test/integration/ibm/buildrunner/skypilot/kube_vela/test_1step.py`; it skips unless the alias, the
+API server and the claim all answer (`libgbtest.kube.vela_cluster_reachable`).
 
 Steps may set `image_id` (Kubernetes runs containers natively — no Pyxis/enroot caveat), and
 `resources.accelerators` / `resources.memory` map onto the pod's resource requests.

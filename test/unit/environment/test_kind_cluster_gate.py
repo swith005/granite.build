@@ -121,7 +121,7 @@ class TestVelaClusterGate:
         calls = stub_path / "calls"
         _stub_kubectl(stub_path, contexts=("gb-vela",), calls=calls)
         assert kube.vela_cluster_reachable()
-        assert "--context gb-vela -n granite-build get pvc gb-shared" in (
+        assert "--context gb-vela -n granite-build get pvc gb-afm-read-write" in (
             calls.read_text()
         )
 

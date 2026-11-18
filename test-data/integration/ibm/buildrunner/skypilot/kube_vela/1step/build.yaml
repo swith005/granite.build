@@ -37,6 +37,9 @@ granite.build:
           config:
             poll_interval_seconds: 5
             command_config:
+              # Vela's RHACS policy rejects SkyPilot's default image (Ray CVE); see
+              # the env file. Same image the env gives the hf steps.
+              image: public.ecr.aws/docker/library/python:3.12-slim
               # Fail loudly unless the input the hfpull step (a DIFFERENT pod) wrote
               # is visible in THIS pod — i.e. the shared volume works. Without it the
               # path exists only in the torn-down hfpull pod and `ls -A` is empty.

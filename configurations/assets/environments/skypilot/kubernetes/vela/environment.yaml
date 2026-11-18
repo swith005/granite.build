@@ -2,8 +2,13 @@
 # granite-build, with shared storage. The remote counterpart of
 # skypilot/kubernetes/local: same shared-volume model, same build fixtures.
 #
-# DRAFT (issue 691): not yet run against Vela. The claim name and the pod
-# security settings below still need confirming on the cluster.
+# DRAFT (issue 691): not yet run against Vela, and it cannot launch there yet:
+# granite-build is an MLBatch namespace, where users and the gb service account
+# may create AppWrappers and PyTorchJobs but not plain pods, and SkyPilot creates
+# plain pods (and needs `kubectl exec` into them, which users lack there). How to
+# bridge that is an open team decision. Everything else below carries over what
+# was validated on the gb CPU cluster (also OpenShift), where the command-step
+# 1step runner and cancellation tests pass.
 #
 # One-time setup per user:
 #   1. Log in. OpenShift names the context it creates after you, so a shared env
@@ -18,18 +23,32 @@
 #      expire) refreshes it too; the alias itself never needs recreating.
 #   3. Check SkyPilot sees it:  sky check kubernetes
 #
-# Shared storage: every pod mounts the ReadWriteMany claim gb-shared at /shared,
-# which is this env's shared_workdir. hf:// inputs are pulled once by a separate
-# hfpull step into /shared/hf_cache and every later pod reads them there; targets
-# hand files to each other through env:///shared/... It must be ReadWriteMany:
-# SkyPilot refuses to start a pod on a ReadWriteOnce claim another pod still
-# uses, and pods overlap (hfpull and its consumer, a teardown and a relaunch).
+# Images: the cluster's RHACS (StackRox) admission policy "Block Critical CVE
+# older than 180 days" rejects SkyPilot's default pod image (its Ray 2.9.3 has a
+# fixable critical CVE), so every pod this env launches uses a current Debian
+# image with pip (the hf steps pip-install their client): the built-in hf steps
+# via config.steps below, the td- workdir cleanup via cleanup_image_id, and the
+# command step via each build's command_config.image (its step.yaml renders
+# image "", which outranks an env default). SkyPilot installs its own runtime
+# into the pod after admission, which the image scan never sees.
 #
-# OpenShift runs pods as an arbitrary non-root UID from the namespace's SCC range.
-# SkyPilot's pod startup installs any missing bootstrap packages with apt-get, so
-# a step image should already contain them (rsync curl wget netcat gcc patch
-# pciutils openssh-server), or the namespace needs an SCC that allows root. See
-# docs/environments/skypilot-kubernetes.md (Custom images).
+# Pods run as root: OpenShift assigns an arbitrary non-root UID, but SkyPilot's
+# pod startup installs missing packages with apt-get. The gdr service account is
+# the one gb steps already run as here (k8s.service_account_name in the gb step
+# chart) and has its own SCC; whether that SCC admits runAsUser 0 on Vela is
+# still to be confirmed (it does on the CPU cluster, via anyuid). gdr cannot
+# delete pods or services, so SkyPilot's in-pod autodown fails as gdr: gbserver
+# downs its own clusters with the launching user's credentials, but a pod
+# orphaned by a crashed gbserver needs a manual `sky down`.
+#
+# Shared storage: the gb chart's ReadWriteMany claim gb-afm-read-write, mounted
+# with a subPath so /shared in these pods is only the gb-skypilot/ folder on it
+# and never the data real gb jobs keep there. /shared is this env's
+# shared_workdir: hf:// inputs are pulled once by a separate hfpull step into
+# /shared/hf_cache and every later pod reads them there; targets hand files to
+# each other through env:///shared/... It must be ReadWriteMany: SkyPilot
+# refuses to start a pod on a ReadWriteOnce claim another pod still uses, and
+# pods overlap (hfpull and its consumer, a teardown and a relaunch).
 name: sky-kube-vela
 type: Skypilot
 subtype: kubernetes
@@ -38,6 +57,15 @@ config:
   # Applied as AUTODOWN on Kubernetes; see skypilot/kubernetes/environment.yaml.
   idle_minutes_to_autostop: 15
   shared_workdir: /shared
+  # See "Images" above.
+  cleanup_image_id: docker:public.ecr.aws/docker/library/python:3.12-slim
+  steps:
+    hfpull:
+      launcher_config:
+        image_id: docker:public.ecr.aws/docker/library/python:3.12-slim
+    hfpush:
+      launcher_config:
+        image_id: docker:public.ecr.aws/docker/library/python:3.12-slim
   # Deep-merged into ~/.sky/config.yaml at launch. Lists there are REPLACED, not
   # merged, so everything pod-level is scoped to the gb-vela context and can never
   # overwrite a pod_config kept for other clusters.
@@ -53,18 +81,23 @@ config:
           # Takes precedence over the namespace in the kubeconfig context
           # (SkyPilot 0.14: kubernetes.context_configs.<context>.namespace).
           namespace: granite-build
+          # Pods use this existing service account; SkyPilot creates none of its own.
+          remote_identity: gdr
           pod_config:
             spec:
+              securityContext:
+                runAsUser: 0
               volumes:
                 - name: gb-shared
                   persistentVolumeClaim:
-                    claimName: gb-shared
+                    claimName: gb-afm-read-write
               containers:
                 # SkyPilot's container, merged by name.
                 - name: ray-node
                   volumeMounts:
                     - name: gb-shared
                       mountPath: /shared
+                      subPath: gb-skypilot
 assetstores:
   - store_uri: space://assetstores/hf
     pull:

@@ -252,16 +252,41 @@ class TestSkyKubeVelaEnvironmentYaml:
         spec = self._context_config()["pod_config"]["spec"]
         claims = [v["persistentVolumeClaim"]["claimName"] for v in spec["volumes"]]
         (container,) = spec["containers"]
+        (mount,) = container["volumeMounts"]
         assert container["name"] == "ray-node"
-        assert claims == ["gb-shared"]
-        assert [m["mountPath"] for m in container["volumeMounts"]] == ["/shared"]
+        # The gb chart's RWX claim (k8s/chart/templates/pvc-afm-read-write.yaml),
+        # shared with real gb jobs, so /shared is only a dedicated subPath.
+        assert claims == ["gb-afm-read-write"]
+        assert mount["mountPath"] == "/shared"
+        assert mount["subPath"] == "gb-skypilot"
+
+    def test_pods_run_as_root_through_the_gdr_account(self):
+        """SkyPilot's apt-get bootstrap needs root; gdr is the gb steps' account."""
+        ctx = self._context_config()
+        assert ctx["remote_identity"] == "gdr"
+        assert ctx["pod_config"]["spec"]["securityContext"]["runAsUser"] == 0
+
+    @pytest.mark.parametrize("step", ["hfpull", "hfpush"])
+    def test_hf_steps_avoid_the_default_skypilot_image(self, step):
+        """RHACS rejects SkyPilot's default pod image; the hf steps need pip."""
+        launcher = self._load()["config"]["steps"][step]["launcher_config"]
+        assert launcher["image_id"].startswith("docker:")
+        assert "python:" in launcher["image_id"]
+
+    def test_cleanup_vm_avoids_the_default_skypilot_image(self):
+        """The td- cleanup is not a step, so it needs its own image setting."""
+        data = self._load()
+        hf_image = data["config"]["steps"]["hfpull"]["launcher_config"]["image_id"]
+        assert data["config"]["cleanup_image_id"] == hf_image
 
     def test_no_kind_only_settings(self):
         """No preloaded-image pull policy and no laptop-sized hf step memory."""
         data = self._load()
         (container,) = self._context_config()["pod_config"]["spec"]["containers"]
         assert "imagePullPolicy" not in container
-        assert "steps" not in data["config"]
+        for step in ("hfpull", "hfpush"):
+            launcher = data["config"]["steps"][step]["launcher_config"]
+            assert "resources" not in launcher
 
     def test_shared_workdir_and_hf_cache_live_on_the_volume(self):
         data = self._load()

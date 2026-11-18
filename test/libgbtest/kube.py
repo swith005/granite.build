@@ -128,7 +128,9 @@ def kind_skip_reason() -> str:
 #: once (the command is in each env file's header).
 DEFAULT_VELA_CONTEXT = "gb-vela"
 VELA_NAMESPACE = "granite-build"
-VELA_CLAIM = SHARED_CLAIM
+#: The gb chart's ReadWriteMany claim (k8s/chart/templates/pvc-afm-read-write.yaml),
+#: mounted by skypilot/kubernetes/vela with a subPath.
+VELA_CLAIM = "gb-afm-read-write"
 VELA_ENV_FILE = (
     "configurations/assets/environments/skypilot/kubernetes/vela/environment.yaml"
 )
