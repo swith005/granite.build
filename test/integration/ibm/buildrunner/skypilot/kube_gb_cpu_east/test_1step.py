@@ -16,11 +16,11 @@
 
 The CPU-cluster copy of
 ``test/integration/standalone/buildrunner/skypilot_kube/test_skypilot_kube_1step.py``
-and the permissive stepping stone to ``kube_vela/test_1step.py``:
+and the permissive stepping stone to ``kube_vela1_gb/test_1step.py``:
 
   HF URI input  ->  command step in a pod on the CPU cluster  ->  hf:// + env:// outputs
 
-Runs on ``space://environments/skypilot/kubernetes/cpu``. Unlike Vela, this
+Runs on ``space://environments/skypilot/kubernetes/gb-cpu-east``. Unlike Vela, this
 cluster allows plain pods, exec and port-forward, so it checks SkyPilot on
 OpenShift itself: pods running as root through the ``gdr`` service account, a
 separate hfpull pod writing the ``hf://`` input to the shared
@@ -32,7 +32,7 @@ The hf:// outputs are pushed by hfpush pods and, through
 ``GBTEST_HF_PUSH_ORG`` (default ``ibm-research``), checked on the Hub, and
 deleted, so it needs an ``HF_TOKEN`` that can write that org.
 
-Requires the ``gb-cpu`` kube context (one-time setup in the env file's header),
+Requires the ``gb-cpu-east`` kube context (one-time setup in the env file's header),
 a current login, ``GBTEST_SKY_CPU_NAMESPACE`` / ``GBTEST_SKY_CPU_CLAIM`` naming
 the cluster's namespace and claim, and a local copy of the env file (both are
 site-specific and kept out of the repo); auto-skips otherwise, and

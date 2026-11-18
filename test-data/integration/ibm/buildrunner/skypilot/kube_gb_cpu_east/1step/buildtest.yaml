@@ -1,5 +1,5 @@
-# YAML-driven spec for test/integration/ibm/buildrunner/skypilot/kube_vela/test_1step.py.
-# Vela copy of test-data/integration/standalone/buildrunner/skypilot_kube/1step/buildtest.yaml.
+# YAML-driven spec for test/integration/ibm/buildrunner/skypilot/kube_gb_cpu_east/test_1step.py.
+# CPU-cluster copy of test-data/integration/standalone/buildrunner/skypilot_kube/1step/buildtest.yaml.
 targets:
   - pod-run
 target_expectations:
@@ -14,15 +14,13 @@ target_expectations:
     # Not asserted under standalone's NoopLineageStore; CALIBRATE on a lineage run.
     jobstats_count: 1
 # The shared standalone space, so the SHIPPED
-# configurations/assets/environments/skypilot/kubernetes/vela/environment.yaml is
-# the env under test. Relative to this YAML's directory. If the env moves to the
-# internal gb-test space (open question on issue 691), point this at gb-test the
-# way slurm_bluevela/1step does.
+# configurations/assets/environments/skypilot/kubernetes/gb-cpu-east/environment.yaml is
+# the env under test. Relative to this YAML's directory.
 space_uri: ../../../../../../../configurations/spaces/local
 # Same coverage as the kind spec: `tests` defaults to runner + runner_cancellation,
 # and simulate_step_failure injects one failure so AnyFailureRetryStrategy tears
 # the pod down and relaunches it as <cluster>-r1.
 simulate_step_failure: true
-# Pod scheduling on a shared cluster + first image pull + the hfpull step.
-# CALIBRATE after the first green run on Vela.
+# Pod scheduling on a remote cluster + first image pull + the hfpull step.
+# CALIBRATE after the first green run on the CPU cluster.
 timeout_minutes: 30

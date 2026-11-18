@@ -15,7 +15,7 @@
 #      cannot pin it directly:
 #        oc login --web --server=<Vela API server URL>
 #   2. Add the fixed alias this env pins, pointing at that login:
-#        kubectl config set-context gb-vela \
+#        kubectl config set-context vela1-gb \
 #          --cluster="$(kubectl config view --minify -o jsonpath='{.contexts[0].context.cluster}')" \
 #          --user="$(kubectl config view --minify -o jsonpath='{.contexts[0].context.user}')" \
 #          --namespace=granite-build
@@ -49,7 +49,7 @@
 # each other through env:///shared/... It must be ReadWriteMany: SkyPilot
 # refuses to start a pod on a ReadWriteOnce claim another pod still uses, and
 # pods overlap (hfpull and its consumer, a teardown and a relaunch).
-name: sky-kube-vela
+name: sky-kube-vela1-gb
 type: Skypilot
 subtype: kubernetes
 config:
@@ -67,17 +67,17 @@ config:
       launcher_config:
         image_id: docker:public.ecr.aws/docker/library/python:3.12-slim
   # Deep-merged into ~/.sky/config.yaml at launch. Lists there are REPLACED, not
-  # merged, so everything pod-level is scoped to the gb-vela context and can never
+  # merged, so everything pod-level is scoped to the vela1-gb context and can never
   # overwrite a pod_config kept for other clusters.
   cloud_config:
     kubernetes:
       # SkyPilot launches only into this context, never the CURRENT one. NOTE: this
       # lands in the GLOBAL SkyPilot config, so plain `sky` use on this machine is
-      # also limited to gb-vela until a build on another environment replaces it.
+      # also limited to vela1-gb until a build on another environment replaces it.
       allowed_contexts:
-        - gb-vela
+        - vela1-gb
       context_configs:
-        gb-vela:
+        vela1-gb:
           # Takes precedence over the namespace in the kubeconfig context
           # (SkyPilot 0.14: kubernetes.context_configs.<context>.namespace).
           namespace: granite-build

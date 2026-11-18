@@ -114,14 +114,14 @@ class TestVelaClusterGate:
     """libgbtest.kube.vela_cluster_reachable: same probe, Vela context + namespace."""
 
     def test_ready_context_with_claim_passes(self, stub_path):
-        _stub_kubectl(stub_path, contexts=("kind-skypilot", "gb-vela"))
+        _stub_kubectl(stub_path, contexts=("kind-skypilot", "vela1-gb"))
         assert kube.vela_cluster_reachable()
 
     def test_claim_is_looked_up_in_granite_build(self, stub_path):
         calls = stub_path / "calls"
-        _stub_kubectl(stub_path, contexts=("gb-vela",), calls=calls)
+        _stub_kubectl(stub_path, contexts=("vela1-gb",), calls=calls)
         assert kube.vela_cluster_reachable()
-        assert "--context gb-vela -n granite-build get pvc gb-afm-read-write" in (
+        assert "--context vela1-gb -n granite-build get pvc gb-afm-read-write" in (
             calls.read_text()
         )
 
@@ -137,15 +137,15 @@ class TestVelaClusterGate:
         # A raw `oc login` context alone is not enough: the env pins the alias.
         _stub_kubectl(stub_path, contexts=("/vela-api:6443/someone@ibm.com",))
         assert not kube.vela_cluster_reachable()
-        assert "gb-vela" in kube.vela_skip_reason()
+        assert "vela1-gb" in kube.vela_skip_reason()
 
     def test_unreachable_api_server_is_refused(self, stub_path):
         # Off VPN, or an expired oc login token.
-        _stub_kubectl(stub_path, contexts=("gb-vela",), ready_rc=1)
+        _stub_kubectl(stub_path, contexts=("vela1-gb",), ready_rc=1)
         assert not kube.vela_cluster_reachable()
 
     def test_missing_shared_claim_is_refused(self, stub_path):
-        _stub_kubectl(stub_path, contexts=("gb-vela",), pvc_rc=1)
+        _stub_kubectl(stub_path, contexts=("vela1-gb",), pvc_rc=1)
         assert not kube.vela_cluster_reachable()
         assert "granite-build" in kube.vela_skip_reason()
 
@@ -160,7 +160,7 @@ class TestVelaClusterGate:
 
 
 class TestCpuClusterGate:
-    """libgbtest.kube.cpu_cluster_reachable: gb-cpu alias, plus a namespace and claim
+    """libgbtest.kube.cpu_cluster_reachable: gb-cpu-east alias, plus a namespace and claim
     that come from the environment (the real ones are kept out of the repo)."""
 
     @pytest.fixture
@@ -170,14 +170,14 @@ class TestCpuClusterGate:
         return stub_path
 
     def test_ready_context_with_claim_passes(self, cpu_site):
-        _stub_kubectl(cpu_site, contexts=("gb-vela", "gb-cpu"))
+        _stub_kubectl(cpu_site, contexts=("vela1-gb", "gb-cpu-east"))
         assert kube.cpu_cluster_reachable()
 
     def test_claim_is_looked_up_in_the_configured_namespace(self, cpu_site):
         calls = cpu_site / "calls"
-        _stub_kubectl(cpu_site, contexts=("gb-cpu",), calls=calls)
+        _stub_kubectl(cpu_site, contexts=("gb-cpu-east",), calls=calls)
         assert kube.cpu_cluster_reachable()
-        assert "--context gb-cpu -n cpu-ns get pvc cpu-claim" in calls.read_text()
+        assert "--context gb-cpu-east -n cpu-ns get pvc cpu-claim" in calls.read_text()
 
     @pytest.mark.parametrize(
         "unset", ["GBTEST_SKY_CPU_NAMESPACE", "GBTEST_SKY_CPU_CLAIM"]
@@ -186,19 +186,19 @@ class TestCpuClusterGate:
         self, cpu_site, monkeypatch, unset
     ):
         calls = cpu_site / "calls"
-        _stub_kubectl(cpu_site, contexts=("gb-cpu",), calls=calls)
+        _stub_kubectl(cpu_site, contexts=("gb-cpu-east",), calls=calls)
         monkeypatch.delenv(unset)
         assert not kube.cpu_cluster_reachable()
         assert not calls.exists()
         assert unset in kube.cpu_skip_reason()
 
     def test_missing_alias_is_refused(self, cpu_site):
-        _stub_kubectl(cpu_site, contexts=("gb-vela",))
+        _stub_kubectl(cpu_site, contexts=("vela1-gb",))
         assert not kube.cpu_cluster_reachable()
-        assert "gb-cpu" in kube.cpu_skip_reason()
+        assert "gb-cpu-east" in kube.cpu_skip_reason()
 
     def test_missing_claim_is_refused(self, cpu_site):
-        _stub_kubectl(cpu_site, contexts=("gb-cpu",), pvc_rc=1)
+        _stub_kubectl(cpu_site, contexts=("gb-cpu-east",), pvc_rc=1)
         assert not kube.cpu_cluster_reachable()
         assert "cpu-claim" in kube.cpu_skip_reason()
 

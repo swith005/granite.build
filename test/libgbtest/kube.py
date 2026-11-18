@@ -4,8 +4,8 @@
 
 Three gates share one probe: :func:`kind_cluster_reachable` for the local kind
 cluster (skypilot/kubernetes/local), :func:`vela_cluster_reachable` for the Vela
-OpenShift cluster (skypilot/kubernetes/vela), and :func:`cpu_cluster_reachable`
-for the gb CPU cluster (skypilot/kubernetes/cpu). The kind gate is described
+OpenShift cluster (skypilot/kubernetes/vela1-gb), and :func:`cpu_cluster_reachable`
+for the gb CPU cluster (skypilot/kubernetes/gb-cpu-east). The kind gate is described
 first; the remote ones differ only in context, namespace, claim and set-up.
 
 The Kubernetes counterpart of the slurm gate (``_slurm_cluster_reachable``) and
@@ -126,24 +126,22 @@ def kind_skip_reason() -> str:
 #: env pins in ``allowed_contexts``, the namespace, and the shared claim. OpenShift
 #: names the context a login creates after the user, so each user adds the alias
 #: once (the command is in each env file's header).
-DEFAULT_VELA_CONTEXT = "gb-vela"
+DEFAULT_VELA_CONTEXT = "vela1-gb"
 VELA_NAMESPACE = "granite-build"
 #: The gb chart's ReadWriteMany claim (k8s/chart/templates/pvc-afm-read-write.yaml),
-#: mounted by skypilot/kubernetes/vela with a subPath.
+#: mounted by skypilot/kubernetes/vela1-gb with a subPath.
 VELA_CLAIM = "gb-afm-read-write"
 VELA_ENV_FILE = (
-    "configurations/assets/environments/skypilot/kubernetes/vela/environment.yaml"
+    "configurations/assets/environments/skypilot/kubernetes/vela1-gb/environment.yaml"
 )
 
-DEFAULT_CPU_CONTEXT = "gb-cpu"
+DEFAULT_CPU_CONTEXT = "gb-cpu-east"
 #: The CPU cluster's namespace and shared claim are site-specific and kept out of
 #: the repo (as is its environment.yaml), so they come from the environment. The
 #: gate skips until both are set.
 ENV_VAR_CPU_NAMESPACE = "GBTEST_SKY_CPU_NAMESPACE"
 ENV_VAR_CPU_CLAIM = "GBTEST_SKY_CPU_CLAIM"
-CPU_ENV_FILE = (
-    "configurations/assets/environments/skypilot/kubernetes/cpu/environment.yaml"
-)
+CPU_ENV_FILE = "configurations/assets/environments/skypilot/kubernetes/gb-cpu-east/environment.yaml"
 
 
 def _remote_reachable(context: str, namespace: str, claim: str) -> bool:

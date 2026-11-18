@@ -211,14 +211,14 @@ class TestSkyKubeLocalEnvironmentYaml:
 
 
 class TestSkyKubeVelaEnvironmentYaml:
-    """Validate configurations/assets/environments/skypilot/kubernetes/vela/environment.yaml."""
+    """Validate configurations/assets/environments/skypilot/kubernetes/vela1-gb/environment.yaml."""
 
     ENV_PATH = (
         ASSETS_DIR
         / "environments"
         / "skypilot"
         / "kubernetes"
-        / "vela"
+        / "vela1-gb"
         / "environment.yaml"
     )
 
@@ -228,7 +228,7 @@ class TestSkyKubeVelaEnvironmentYaml:
 
     def _context_config(self):
         kube = self._load()["config"]["cloud_config"]["kubernetes"]
-        return kube["context_configs"]["gb-vela"]
+        return kube["context_configs"]["vela1-gb"]
 
     def test_is_a_kubernetes_subtype(self):
         data = self._load()
@@ -239,7 +239,7 @@ class TestSkyKubeVelaEnvironmentYaml:
     def test_pins_the_gb_vela_alias(self):
         """A fixed alias: the context `oc login` creates is named after the user."""
         kube = self._load()["config"]["cloud_config"]["kubernetes"]
-        assert kube["allowed_contexts"] == ["gb-vela"]
+        assert kube["allowed_contexts"] == ["vela1-gb"]
 
     def test_namespace_is_pinned_per_context(self):
         """Not left to whatever namespace the user's kubeconfig context carries."""
@@ -303,16 +303,21 @@ class TestSkyKubeVelaEnvironmentYaml:
 
 
 _CPU_ENV_PATH = (
-    ASSETS_DIR / "environments" / "skypilot" / "kubernetes" / "cpu" / "environment.yaml"
+    ASSETS_DIR
+    / "environments"
+    / "skypilot"
+    / "kubernetes"
+    / "gb-cpu-east"
+    / "environment.yaml"
 )
 
 
 @pytest.mark.skipif(
     not _CPU_ENV_PATH.is_file(),
-    reason="skypilot/kubernetes/cpu is site-specific and kept out of the repo",
+    reason="skypilot/kubernetes/gb-cpu-east is site-specific and kept out of the repo",
 )
 class TestSkyKubeCpuEnvironmentYaml:
-    """Validate configurations/assets/environments/skypilot/kubernetes/cpu/environment.yaml.
+    """Validate configurations/assets/environments/skypilot/kubernetes/gb-cpu-east/environment.yaml.
 
     The file names a site-specific namespace and claim, so it is not committed;
     these checks run wherever a local copy exists.
@@ -326,7 +331,7 @@ class TestSkyKubeCpuEnvironmentYaml:
 
     def _context_config(self):
         kube = self._load()["config"]["cloud_config"]["kubernetes"]
-        return kube["context_configs"]["gb-cpu"]
+        return kube["context_configs"]["gb-cpu-east"]
 
     def test_is_a_kubernetes_subtype(self):
         data = self._load()
@@ -336,7 +341,7 @@ class TestSkyKubeCpuEnvironmentYaml:
 
     def test_pins_the_gb_cpu_alias_and_namespace(self):
         kube = self._load()["config"]["cloud_config"]["kubernetes"]
-        assert kube["allowed_contexts"] == ["gb-cpu"]
+        assert kube["allowed_contexts"] == ["gb-cpu-east"]
         assert "pod_config" not in kube
         assert self._context_config()["namespace"]
 

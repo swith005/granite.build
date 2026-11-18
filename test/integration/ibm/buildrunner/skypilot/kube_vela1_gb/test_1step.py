@@ -19,7 +19,7 @@ The Vela copy of
 
   HF URI input  ->  command step in a pod on Vela (granite-build)  ->  hf:// + env:// outputs
 
-Runs on ``space://environments/skypilot/kubernetes/vela``, the same shared-volume
+Runs on ``space://environments/skypilot/kubernetes/vela1-gb``, the same shared-volume
 model as the kind env: a separate hfpull pod downloads the ``hf://`` input into the
 ``gb-shared`` claim every pod mounts at /shared, and the command step (a different
 pod) fails unless it can see it. ``step_count: 5`` pins the separate pull and the
@@ -30,7 +30,7 @@ The hf:// outputs are pushed by hfpush pods and, through
 ``GBTEST_HF_PUSH_ORG`` (default ``ibm-research``), checked on the Hub, and
 deleted, so it needs an ``HF_TOKEN`` that can write that org.
 
-Requires the ``gb-vela`` kube context (one-time setup in the env file's header),
+Requires the ``vela1-gb`` kube context (one-time setup in the env file's header),
 a current ``oc login``, the IBM network, and the ``gb-shared`` claim in
 ``granite-build``; auto-skips otherwise, and always in CI/CD.
 
