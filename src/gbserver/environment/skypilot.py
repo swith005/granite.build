@@ -3183,6 +3183,18 @@ class Skypilot(SkypilotLaunchConfigCheck, Environment):
             return 10
         return self.config.config.get("idle_minutes_to_autostop", 10)
 
+    def _cleanup_image_id(self: Self) -> Optional[str]:
+        """The ``cleanup_image_id`` the teardown cleanup VM launches with, or ``None``.
+
+        Unset keeps SkyPilot's default image. Set it where cluster admission
+        rejects that image -- e.g. an OpenShift cluster whose RHACS policy blocks
+        images with old critical CVEs -- or the ``td-`` cleanup is refused and the
+        per-run workdir is left on the shared filesystem.
+        """
+        if self.config is None:
+            return None
+        return self.config.config.get("cleanup_image_id") or None
+
     def _pyxis_gpu_sbatch_directives(
         self: Self,
         accelerators: Optional[Any],
@@ -3662,6 +3674,9 @@ class Skypilot(SkypilotLaunchConfigCheck, Environment):
         res_kwargs["cpus"] = _cpus_floor(cloud, 1)
         if cloud not in _SSH_HPC_CLOUDS:
             res_kwargs["memory"] = "2+"  # keep Ray above the sub-1-GiB nano floor
+        cleanup_image = self._cleanup_image_id()
+        if cleanup_image:
+            res_kwargs["image_id"] = cleanup_image
         zone = provider.cleanup_zone() if provider is not None else None
         if zone:
             res_kwargs["zone"] = zone  # land where a mount target exists
@@ -3744,8 +3759,20 @@ class Skypilot(SkypilotLaunchConfigCheck, Environment):
             # support (see _CLOUDS_NEEDING_MANUAL_TEARDOWN), so there the td-
             # cluster otherwise keeps its allocation indefinitely. Down it
             # explicitly; _teardown tolerates a cluster that never came up.
+            #
+            # Kubernetes does support autodown, but the pod performs it itself
+            # with its own service account. Where that account may not delete
+            # pods/services (e.g. an OpenShift namespace whose `remote_identity`
+            # SA only has `view`) the autodown is refused and the td- pod runs
+            # forever; even where it works, the pod idles for the whole autodown
+            # window holding quota. The reap job has already reached a terminal
+            # state above, so downing it now from gbserver (with the launching
+            # user's credentials) is safe on every Kubernetes cluster.
             cloud_group = (str(self._get_cloud()).split("/", 1)[0] or "").lower()
-            if cloud_group in _CLOUDS_NEEDING_MANUAL_TEARDOWN:
+            if (
+                cloud_group in _CLOUDS_NEEDING_MANUAL_TEARDOWN
+                or cloud_group in _CLOUDS_AUTODOWN_ONLY
+            ):
                 await self._teardown(cluster_name)
 
     async def _await_cleanup_job_status(

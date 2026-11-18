@@ -192,6 +192,57 @@ class TestSkypilotTeardown:
             f"{res_kwargs!r}"
         )
 
+    @staticmethod
+    async def _cleanup_vm_resource_kwargs(extra_config: dict) -> dict:
+        """sky.Resources kwargs of the td- cleanup VM for a k8s env with ``extra_config``."""
+        config = EnvironmentConfig(
+            name="test-skypilot",
+            type="Skypilot",
+            config={
+                "default_cloud": "k8s",
+                "shared_workdir": "/shared",
+                **extra_config,
+            },
+        )
+        env = Skypilot(event_q=asyncio.Queue(), environment_config=config)
+        setup_id = "3168aa02-1234-5678-9abc-def012345678"
+        await env.setup_skypilot(
+            setup_id,
+            runmetadata=EntityRunMetadata(
+                build_id="9f3ac1d2-aaaa-bbbb-cccc-ddddeeeeffff",
+                target_name="train",
+                targetrun_id="run-1",
+            ),
+        )
+        mock_sky = MagicMock()
+        mock_sky.Resources = MagicMock(return_value=MagicMock())
+        mock_sky.Task = MagicMock(return_value=MagicMock())
+        mock_sky.launch = MagicMock(return_value="req-td")
+        mock_sky.stream_and_get = MagicMock(return_value=None)
+        with (
+            patch("gbserver.environment.skypilot.sky", mock_sky),
+            patch("gbserver.environment.skypilot.HAS_SKYPILOT", True),
+        ):
+            await env.teardown_skypilot(setup_id)
+        return mock_sky.Resources.call_args.kwargs
+
+    @pytest.mark.asyncio
+    async def test_cleanup_vm_uses_the_env_cleanup_image(self):
+        # On clusters whose admission policy (e.g. OpenShift RHACS) rejects
+        # SkyPilot's default image, the env names an image the td- VM can use;
+        # otherwise the cleanup is refused and the per-run workdir is orphaned.
+        image = "docker:public.ecr.aws/docker/library/python:3.12-slim"
+        res_kwargs = await self._cleanup_vm_resource_kwargs({"cleanup_image_id": image})
+        assert res_kwargs.get("image_id") == image
+        # The image sits alongside, not instead of, the small-instance floor.
+        assert res_kwargs.get("cpus") == "1+"
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("extra", [{}, {"cleanup_image_id": ""}])
+    async def test_cleanup_vm_keeps_skypilots_default_image_when_unset(self, extra):
+        res_kwargs = await self._cleanup_vm_resource_kwargs(extra)
+        assert "image_id" not in res_kwargs
+
     @pytest.mark.parametrize("cloud", ["slurm", "lsf"])
     @pytest.mark.asyncio
     async def test_cleanup_vm_cpus_floor_is_a_bare_int_on_hpc_clouds(self, cloud):
@@ -295,8 +346,25 @@ class TestWorkdirTeardownReleasesHpcCluster:
         mock_sky.down.assert_called_once_with(td_name, purge=True)
 
     @pytest.mark.asyncio
-    async def test_autodown_cloud_is_left_to_autodown(self):
-        mock_sky, _ = await _run_workdir_teardown("k8s")
+    @pytest.mark.parametrize("cloud", ["k8s", "kubernetes"])
+    async def test_kubernetes_td_cluster_is_downed(self, cloud):
+        # Kubernetes autodown runs inside the pod with its own service account,
+        # which on e.g. an OpenShift namespace may only have `view`: the
+        # self-delete is refused and the td- pod is never removed. gbserver
+        # downs it with the launching user's credentials instead.
+        mock_sky, td_name = await _run_workdir_teardown(cloud)
+        mock_sky.down.assert_called_once_with(td_name, purge=True)
+
+    @pytest.mark.asyncio
+    async def test_kubernetes_td_cluster_is_downed_even_if_rm_fails(self):
+        mock_sky, td_name = await _run_workdir_teardown(
+            "k8s", stream_side_effect=RuntimeError("admission refused")
+        )
+        mock_sky.down.assert_called_once_with(td_name, purge=True)
+
+    @pytest.mark.asyncio
+    async def test_vm_cloud_is_left_to_autodown(self):
+        mock_sky, _ = await _run_workdir_teardown("aws")
         mock_sky.down.assert_not_called()
 
 

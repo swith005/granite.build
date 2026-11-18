@@ -47,6 +47,10 @@ def _stub_kubectl(
 def stub_path(tmp_path, monkeypatch):
     monkeypatch.setenv("PATH", str(tmp_path))
     monkeypatch.delenv("GBTEST_SKY_KUBE_CONTEXT", raising=False)
+    monkeypatch.delenv("GBTEST_SKY_VELA_CONTEXT", raising=False)
+    monkeypatch.delenv("GBTEST_SKY_CPU_CONTEXT", raising=False)
+    monkeypatch.delenv("GBTEST_SKY_CPU_NAMESPACE", raising=False)
+    monkeypatch.delenv("GBTEST_SKY_CPU_CLAIM", raising=False)
     return tmp_path
 
 
@@ -104,3 +108,102 @@ class TestProbeIsCached:
         """Same group as every skypilot_integration test, so kube never overlaps slurm."""
         assert kube.KUBE_XDIST_GROUP.name == "xdist_group"
         assert kube.KUBE_XDIST_GROUP.kwargs == {"name": "skypilot"}
+
+
+class TestVelaClusterGate:
+    """libgbtest.kube.vela_cluster_reachable: same probe, Vela context + namespace."""
+
+    def test_ready_context_with_claim_passes(self, stub_path):
+        _stub_kubectl(stub_path, contexts=("kind-skypilot", "gb-vela"))
+        assert kube.vela_cluster_reachable()
+
+    def test_claim_is_looked_up_in_granite_build(self, stub_path):
+        calls = stub_path / "calls"
+        _stub_kubectl(stub_path, contexts=("gb-vela",), calls=calls)
+        assert kube.vela_cluster_reachable()
+        assert "--context gb-vela -n granite-build get pvc gb-shared" in (
+            calls.read_text()
+        )
+
+    def test_kind_gate_still_checks_default_namespace(self, stub_path):
+        calls = stub_path / "calls"
+        _stub_kubectl(stub_path, calls=calls)
+        assert kube.kind_cluster_reachable()
+        assert "--context kind-skypilot -n default get pvc gb-shared" in (
+            calls.read_text()
+        )
+
+    def test_missing_alias_is_refused(self, stub_path):
+        # A raw `oc login` context alone is not enough: the env pins the alias.
+        _stub_kubectl(stub_path, contexts=("/vela-api:6443/someone@ibm.com",))
+        assert not kube.vela_cluster_reachable()
+        assert "gb-vela" in kube.vela_skip_reason()
+
+    def test_unreachable_api_server_is_refused(self, stub_path):
+        # Off VPN, or an expired oc login token.
+        _stub_kubectl(stub_path, contexts=("gb-vela",), ready_rc=1)
+        assert not kube.vela_cluster_reachable()
+
+    def test_missing_shared_claim_is_refused(self, stub_path):
+        _stub_kubectl(stub_path, contexts=("gb-vela",), pvc_rc=1)
+        assert not kube.vela_cluster_reachable()
+        assert "granite-build" in kube.vela_skip_reason()
+
+    def test_context_override(self, stub_path, monkeypatch):
+        monkeypatch.setenv("GBTEST_SKY_VELA_CONTEXT", "vela-mine")
+        _stub_kubectl(stub_path, contexts=("vela-mine",))
+        assert kube.vela_cluster_reachable()
+        assert "vela-mine" in kube.vela_skip_reason()
+
+    def test_missing_kubectl_is_refused(self, stub_path):
+        assert not kube.vela_cluster_reachable()
+
+
+class TestCpuClusterGate:
+    """libgbtest.kube.cpu_cluster_reachable: gb-cpu alias, plus a namespace and claim
+    that come from the environment (the real ones are kept out of the repo)."""
+
+    @pytest.fixture
+    def cpu_site(self, stub_path, monkeypatch):
+        monkeypatch.setenv("GBTEST_SKY_CPU_NAMESPACE", "cpu-ns")
+        monkeypatch.setenv("GBTEST_SKY_CPU_CLAIM", "cpu-claim")
+        return stub_path
+
+    def test_ready_context_with_claim_passes(self, cpu_site):
+        _stub_kubectl(cpu_site, contexts=("gb-vela", "gb-cpu"))
+        assert kube.cpu_cluster_reachable()
+
+    def test_claim_is_looked_up_in_the_configured_namespace(self, cpu_site):
+        calls = cpu_site / "calls"
+        _stub_kubectl(cpu_site, contexts=("gb-cpu",), calls=calls)
+        assert kube.cpu_cluster_reachable()
+        assert "--context gb-cpu -n cpu-ns get pvc cpu-claim" in calls.read_text()
+
+    @pytest.mark.parametrize(
+        "unset", ["GBTEST_SKY_CPU_NAMESPACE", "GBTEST_SKY_CPU_CLAIM"]
+    )
+    def test_unset_site_config_skips_without_calling_kubectl(
+        self, cpu_site, monkeypatch, unset
+    ):
+        calls = cpu_site / "calls"
+        _stub_kubectl(cpu_site, contexts=("gb-cpu",), calls=calls)
+        monkeypatch.delenv(unset)
+        assert not kube.cpu_cluster_reachable()
+        assert not calls.exists()
+        assert unset in kube.cpu_skip_reason()
+
+    def test_missing_alias_is_refused(self, cpu_site):
+        _stub_kubectl(cpu_site, contexts=("gb-vela",))
+        assert not kube.cpu_cluster_reachable()
+        assert "gb-cpu" in kube.cpu_skip_reason()
+
+    def test_missing_claim_is_refused(self, cpu_site):
+        _stub_kubectl(cpu_site, contexts=("gb-cpu",), pvc_rc=1)
+        assert not kube.cpu_cluster_reachable()
+        assert "cpu-claim" in kube.cpu_skip_reason()
+
+    def test_context_override(self, cpu_site, monkeypatch):
+        monkeypatch.setenv("GBTEST_SKY_CPU_CONTEXT", "cpu-mine")
+        _stub_kubectl(cpu_site, contexts=("cpu-mine",))
+        assert kube.cpu_cluster_reachable()
+        assert "cpu-mine" in kube.cpu_skip_reason()

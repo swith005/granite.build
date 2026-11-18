@@ -122,6 +122,16 @@ otherwise be autodowned before the next one, and the poller then sees a missing 
 `FAILED`. gbserver enforces a floor of 2× the step's poll interval on Kubernetes, raising a shorter window
 and logging a warning; the shipped env uses 15. Set `null` to disable it entirely.
 
+**Autodown runs inside the pod, as the pod's service account.** When the env sets
+`remote_identity` to an account that may not delete pods and services (on OpenShift, often one with
+only the `view` role), every autodown is refused (`... cannot delete resource "services"`), the pod is
+never removed, and its SkyPilot record sticks at `AUTOSTOPPING`. So the safety net above does not work
+there: a pod orphaned by a crashed gbserver has to be removed with `sky down <cluster>` from a machine
+whose login can delete it. gbserver's own teardown does not depend on autodown: per-step cleanup runs
+`sky down` with the launching user's credentials, and the one-shot `td-` workdir cleanup is downed the
+same way as soon as its job finishes (as on SLURM and LSF), so it also stops holding quota for the
+idle window.
+
 > **`sbatch_options` is a no-op on Kubernetes.** The per-step `sbatch_options`
 > field ([skypilot.md](skypilot.md#config-overrides-docker-sbatch_options)) is a
 > **SLURM-only** knob; SkyPilot exposes no per-task equivalent on Kubernetes, so
@@ -157,7 +167,7 @@ Kubernetes has no host/container split to worry about: the PVC is attached as a 
 container's filesystem too. There is no separate `workdir` mount to configure (unlike SLURM), and image
 steps see `/shared` like bare ones.
 
-## The two shipped environments
+## The shipped environments
 
 **`skypilot/kubernetes`** works out of the box for steps without `hf://` inputs or cross-target file
 handoff. It ships the shared-storage wiring above as a commented-out, documented block to fill in with your
@@ -215,6 +225,21 @@ already on the kind node (the nightly preloads them with `scripts/ci-docker-imag
 re-pulled. A mutable tag (`:latest`) then isn't refreshed either: pin a version, or remove the stale
 copy with `docker exec skypilot-control-plane crictl rmi <image>`.
 
+**`skypilot/kubernetes/vela`** (draft, not yet run on the cluster) is the same model on the Vela
+OpenShift cluster, in the `granite-build` namespace. It differs from the kind env in three ways:
+
+- It pins a fixed context alias, `gb-vela`, because the context `oc login` creates is named after the
+  user. Create the alias once from your own login (the command is in the env file's header); a later
+  `oc login` refreshes the token behind it.
+- It sets `namespace: granite-build` under `context_configs.gb-vela`, which SkyPilot 0.14 prefers over
+  the kubeconfig context's namespace.
+- It drops the kind-only settings: no `IfNotPresent` pull policy and no 1Gi hf step memory.
+
+It expects a ReadWriteMany claim named `gb-shared` in `granite-build`. OpenShift runs pods as an
+arbitrary non-root UID, so see [Custom images](#custom-images) before choosing a step image. The build
+test is `test/integration/ibm/buildrunner/skypilot/kube_vela/test_1step.py`; it skips unless the alias,
+the API server and the claim all answer (`libgbtest.kube.vela_cluster_reachable`).
+
 Steps may set `image_id` (Kubernetes runs containers natively — no Pyxis/enroot caveat), and
 `resources.accelerators` / `resources.memory` map onto the pod's resource requests.
 
@@ -232,6 +257,16 @@ Two requirements, both checked on a local kind cluster:
 - **With shared storage, the image needs nothing to fetch `hf://` inputs.** They are downloaded by the
   separate `hfpull` step into the shared volume and read from there. Inline pulls (`inline: true`) are
   legacy, kept only for existing environments; don't use them on Kubernetes.
+- **Some clusters reject SkyPilot's default image at admission.** OpenShift clusters with the RHACS
+  (StackRox) policy "Block Critical CVE older than 180 days" refuse it, because the Ray it ships has a
+  fixable critical CVE; the refusal comes back as `admission webhook "policyeval.stackrox.io" denied the
+  request`. The cluster may admit an image it has not scanned yet, so it can pass once and then fail on
+  every launch. Pick a current Debian/Ubuntu image with pip (the hf steps pip-install their client, e.g.
+  `public.ecr.aws/docker/library/python:3.12-slim`) and set it in three places:
+  `config.steps.hfpull` / `hfpush` `launcher_config.image_id` for the
+  built-in hf steps, `config.cleanup_image_id` for the `td-` workdir cleanup, and each build's
+  `command_config.image` for the command step (its step.yaml sets `image: ""`, which outranks an env
+  default). SkyPilot installs its own runtime into the pod after admission, which the scan never sees.
 
 ## See also
 

@@ -61,6 +61,12 @@ config:
                                     # against, used as the base dir for gbserver-managed cross-step
                                     # caches (HF cache) and exported as GB_SHARED_WORKDIR. See below.
 
+  cleanup_image_id: <image>         # Optional. image_id for the one-shot `td-` VM that rm's the
+                                    # per-run workdir at teardown (it is not a step, so step image
+                                    # settings don't reach it). Unset = SkyPilot's default image. Set
+                                    # it where admission rejects that image (e.g. an OpenShift RHACS
+                                    # CVE policy); see skypilot-kubernetes.md, Custom images.
+
   # Inline SkyPilot config — three optional, mostly cloud-specific blocks (see "Inline config"):
   cluster_ssh_configs: { ... }      # SSH reachability for slurm/lsf. See skypilot-slurm/-lsf pages.
   cloud_config: { ... }             # Behavioral SkyPilot config, deep-merged into ~/.sky/config.yaml.
