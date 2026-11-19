@@ -34,8 +34,9 @@ deleted, so it needs an ``HF_TOKEN`` that can write that org.
 
 Requires the ``gb-cpu-east`` kube context (one-time setup in the env file's header),
 a current login, ``GBTEST_SKY_CPU_NAMESPACE`` / ``GBTEST_SKY_CPU_CLAIM`` naming
-the cluster's namespace and claim, and a local copy of the env file (both are
-site-specific and kept out of the repo); auto-skips otherwise, and
+the cluster's namespace and claim, and the internal gb-test space, which holds
+the env (both are site-specific and kept out of this repo); auto-skips otherwise,
+and
 always in CI/CD.
 
 The fixture's build.yaml and buildtest.yaml live in the directory returned by

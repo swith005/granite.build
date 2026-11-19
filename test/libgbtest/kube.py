@@ -137,11 +137,13 @@ VELA_ENV_FILE = (
 
 DEFAULT_CPU_CONTEXT = "gb-cpu-east"
 #: The CPU cluster's namespace and shared claim are site-specific and kept out of
-#: the repo (as is its environment.yaml), so they come from the environment. The
-#: gate skips until both are set.
+#: this repo (its environment.yaml lives in the internal gb-test space), so they
+#: come from the environment. The gate skips until both are set.
 ENV_VAR_CPU_NAMESPACE = "GBTEST_SKY_CPU_NAMESPACE"
 ENV_VAR_CPU_CLAIM = "GBTEST_SKY_CPU_CLAIM"
-CPU_ENV_FILE = "configurations/assets/environments/skypilot/kubernetes/gb-cpu-east/environment.yaml"
+CPU_ENV_FILE = (
+    "environments/skypilot/kubernetes/gb-cpu-east/environment.yaml in the gb-test space"
+)
 
 
 def _remote_reachable(context: str, namespace: str, claim: str) -> bool:
@@ -208,8 +210,7 @@ def cpu_skip_reason() -> str:
     if not (cpu_namespace() and cpu_claim()):
         return (
             f"CPU cluster: set {ENV_VAR_CPU_NAMESPACE} and {ENV_VAR_CPU_CLAIM} to its "
-            f"namespace and shared claim (and provide {CPU_ENV_FILE}, kept out of "
-            "the repo)"
+            f"namespace and shared claim (the env is {CPU_ENV_FILE})"
         )
     return "CPU cluster " + _remote_skip_reason(
         expected_cpu_context(), cpu_namespace(), cpu_claim(), CPU_ENV_FILE
